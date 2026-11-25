@@ -404,6 +404,7 @@ function welcome(){
  <div class="row" style="margin-top:12px"><button class="acc" data-a="login" style="flex:1">Entrar</button></div>
  <div class="row" style="margin-top:8px"><button class="ghost" data-a="demo" style="flex:1">Acceso rápido de prueba</button></div>
  <div class="row" style="margin-top:8px"><button class="link" data-a="backup" style="flex:1">Restaurar una copia de seguridad</button></div>
+ ${/iPhone|iPad|iPod/.test(navigator.userAgent)&&location.protocol!=='file:'?`<p class="note" style="margin-top:12px">${navigator.standalone?'Estás en la app de tu pantalla de inicio: ábrela siempre desde este ícono, porque Safari guarda los datos por separado.':'Consejo: si vas a agregar BECOME a la pantalla de inicio, hazlo <b>antes</b> de registrarte y regístrate desde el ícono. El ícono y Safari guardan los datos por separado. En modo Privado de Safari nada se guarda.'}</p>`:''}
  ${location.protocol==='file:'&&/iPhone|iPad|iPod/.test(navigator.userAgent)?'<p class="note" style="margin-top:12px;border:1px solid var(--acc)">Abriste BECOME como archivo desde la app Archivos: el iPhone puede borrar los datos al salir. Ábrelo desde su dirección web en Safari y agrégalo a la pantalla de inicio.</p>':''}
  <p class="sm mute" style="margin-top:12px">Tus datos se guardan en este navegador${db?' y en tu cuenta':''}. No necesitas instalar nada.</p></div>
  <p class="sm mute">BECOME entrega estimaciones con fórmulas validadas, no diagnósticos. Si tienes una condición de salud, embarazo o un trastorno de la conducta alimentaria, úsala junto a tu médico o nutricionista.</p></div>`;
@@ -804,10 +805,10 @@ async function onClick(e){const g=e.target.closest('[data-go]');if(g){go(g.datas
  switch(a){
  case'login':{const em=val('em').trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(em)){toast('Escribe un correo válido');return}account=em;const st=load(em);S=st||Object.assign(DEF(),{});onbStep=0;save();render();break}
  case'demo':{account='demo';tab='hoy';const st=load('demo');if(st)S=st;else{S=DEF();demoData()}save();render();break}
- case'seg':{captureOnb();p[d.k]=d.k==='sex'||d.k==='goal'?d.v:+d.v;render();break}
- case'onb1':{captureOnb();if(!(p.height>100&&p.weight>30&&p.birth)){toast('Revisa estatura, peso y fecha');return}onbStep=1;render();break}
+ case'seg':{captureOnb();p[d.k]=d.k==='sex'||d.k==='goal'?d.v:+d.v;save();render();break}
+ case'onb1':{captureOnb();if(!(p.height>100&&p.weight>30&&p.birth)){toast('Revisa estatura, peso y fecha');return}onbStep=1;S._onb=1;save();render();break}
  case'authai':{if(!sample)return;try{await sample('Responde solo: OK',{modelTier:'quick',cache:false});S.ai.ok=true;S.ai.denied=false;save();toast('BECOME AI autorizado')}catch(er){if(er&&er.code==='not_granted')S.ai.denied=true;toast(er&&er.code==='not_granted'?'No autorizado: el Coach usará el modo básico':'No se pudo autorizar ahora')}render();if($('#modal').innerHTML)mProfile();break}
- case'onb2':onbStep=2;render();break;
+ case'onb2':onbStep=2;S._onb=2;save();render();break;
  case'onb3':{captureOnb();p.goalWeight=+val('pg')||p.weight;const{_draft,...rest}=S;S.profile={...p,startWeight:p.weight,startDate:today()};delete S._draft;S.weights=[{date:today(),kg:p.weight}];if(p.goal==='gain'&&p.pace>.5)S.profile.pace=.25;save();go('coach');tab='coach';render();break}
  case'registrar':mRegistrar();break;
  case'foto':case'cfoto':$('#photo').dataset.from=a;$('#photo').click();break;
@@ -928,7 +929,7 @@ function route(){const h=location.hash.slice(1);if(TABS.some(t=>t[0]===h)){tab=h
 window.addEventListener('hashchange',()=>{close();route()});
 setInterval(()=>{if(account&&S.profile&&(tab==='hoy'||(tab==='entreno'&&session))&&!$('#modal').innerHTML&&!document.activeElement.matches('input,textarea'))render()},60000);
 /* arranque */
-try{const cur=localStorage.getItem('become.cur');if(cur){const st=load(cur);if(st){account=cur;S=st}}}catch(e){}
+try{const cur=localStorage.getItem('become.cur');if(cur){const st=load(cur);if(st){account=cur;S=st;if(!S.profile&&S._onb)onbStep=S._onb}}}catch(e){}
 if(!location.hash&&account&&S.profile)tab='hoy';route();initCaps();
 setTimeout(()=>{if(cloudPending){cloudPending=false;render()}},12000);
 (async()=>{let cur=null;try{cur=localStorage.getItem('become.cur')}catch(e){}const all=await idbAll();
