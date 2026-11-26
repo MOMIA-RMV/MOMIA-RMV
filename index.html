@@ -371,15 +371,20 @@ function regenMenu(){S.menu.seed++;save()}
 
 /* ---------- datos de Apple Health (vía Atajo de iPhone: ?pasos=&sueno=&fc=&peso=) ---------- */
 let pendingH=null;
-(function(){try{const q=new URLSearchParams(location.search);const num=k=>{let v=q.get(k);if(v==null)return null;v=String(v).replace(/[^0-9.,]/g,'');if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(v))v=v.replace(/\./g,'');else if(/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(v)&&!/^\d{1,3},\d{3}$/.test(v))v=v.replace(/,/g,'');v=v.replace(',','.');const n=parseFloat(v);return isFinite(n)?n:null};
+function healthFrom(q){const num=k=>{let v=q.get(k);if(v==null)return null;v=String(v).replace(/[^0-9.,]/g,'');if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(v))v=v.replace(/\./g,'');else if(/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(v)&&!/^\d{1,3},\d{3}$/.test(v))v=v.replace(/,/g,'');v=v.replace(',','.');const n=parseFloat(v);return isFinite(n)?n:null};
  const h={};let x=num('pasos');if(x!=null&&x>=0&&x<200000)h.pasos=Math.round(x);
  x=(()=>{const r=String(q.get('sueno')||q.get('sueño')||'').toLowerCase();let m=r.match(/(\d+)\s*:\s*(\d+)/);if(m)return +m[1]+m[2]/60;m=r.match(/(\d+(?:[.,]\d+)?)\s*h/);if(m){const mm=r.match(/(\d+)\s*m/);return parseFloat(m[1].replace(',','.'))+(mm?mm[1]/60:0)}m=r.match(/^\s*(\d+)\s*min/);if(m)return m[1]/60;return null})();if(x==null)x=num('sueno');if(x==null)x=num('sueño');if(x!=null&&x>0){if(x>1440)x=x/3600;else if(x>24)x=x/60;if(x<=24)h.sueno=Math.round(x*10)/10}
  x=num('fc');if(x!=null&&x>=25&&x<=220)h.fc=Math.round(x);
  x=num('peso');if(x!=null&&x>=25&&x<=350)h.peso=Math.round(x*10)/10;
- x=num('kcal');if(x!=null&&x>=0&&x<=15000)h.kcal=Math.round(x);
+ x=num('kcal');if(x!=null&&x>=0&&x<=15000)h.kcal=Math.round(x);return h}
+(function(){try{const q=new URLSearchParams(location.search);const h=healthFrom(q);
  if(['pasos','sueno','sueño','fc','peso','kcal'].some(k=>q.has(k))){const rest=[...q.entries()].filter(([k])=>!['pasos','sueno','sueño','fc','peso','kcal'].includes(k));
   const qs=rest.length?'?'+new URLSearchParams(rest).toString():'';try{history.replaceState(null,'',location.pathname+qs+location.hash)}catch(e){}}
  if(Object.keys(h).length)pendingH=h}catch(e){}})();
+function pasteHealth(){const go=t=>{t=String(t||'');const i=t.indexOf('?');const h=healthFrom(new URLSearchParams((i>=0?t.slice(i+1):t).trim()));
+ if(!Object.keys(h).length){toast('No encontré datos de Salud en lo copiado. Corre primero el atajo.');return false}pendingH=h;close();applyHealth();render();return true};
+ if(navigator.clipboard&&navigator.clipboard.readText)navigator.clipboard.readText().then(go).catch(mPasteH);else mPasteH()}
+function mPasteH(){modal('Pegar datos de Salud',`<p class="sm mute">Mantén presionado el cuadro, toca <b>Pegar</b> y luego <b>Importar</b>.</p><textarea id="hpt" rows="3" style="width:100%"></textarea><div class="grid2" style="margin-top:10px"><button class="acc" data-a="hpasteGo">Importar</button><button class="ghost" data-a="close">Cancelar</button></div>`)}
 function applyHealth(){if(!pendingH||!account||!S.profile)return;const h=pendingH;pendingH=null;const t=today();
  if(!S.health)S.health={};S.health[t]=Object.assign({},S.health[t]||{},h,{at:nowHM()});
  if(h.peso){S.weights=S.weights.filter(w=>w.date!==t);S.weights.push({date:t,kg:h.peso})}
@@ -413,7 +418,7 @@ async function initCaps(){const maxW=window.parent!==window?40:4;for(let i=0;i<m
 let tab='hoy',planDay=null,onbStep=0,session=null,recording=false,busy=false;
 const ICON={coach:'<path d="M4 5h16v10H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',hoy:'<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',plan:'<rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2"/>',entreno:'<path d="M3 10v4M6 7v10M18 7v10M21 10v4M6 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',compras:'<path d="M4 5h2l2 10h10l2-7H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="9" cy="19" r="1.5" fill="currentColor"/><circle cx="17" cy="19" r="1.5" fill="currentColor"/>',evolucion:'<path d="M4 18l5-6 4 3 7-9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'};
 const TABS=[['coach','Coach'],['hoy','Hoy'],['plan','Mi plan'],['entreno','Entreno'],['compras','Compras'],['evolucion','Mi evolución']];
-function render(){applyHealth();const r=$('#root');if(!S.profile&&cloudPending){r.innerHTML='<div class="welcome"><div class="logo">BECOME<span>.</span></div><p class="mute">Cargando tus datos…</p></div>';return}if(!S.profile||!account){r.innerHTML=welcome();return}
+function render(){applyHealth();const r=$('#root');if(!S.profile&&cloudPending){r.innerHTML='<div class="welcome"><div class="logo">BECOME<span>.</span></div><p class="mute">Cargando tus datos…</p></div>';return}if(!S.profile||!account){r.innerHTML=welcome()+(pendingH?'<div class="card" style="margin:12px;border-color:var(--acc)"><b>Llegaron tus datos de Salud, pero aquí no hay sesión abierta.</b><div class="sm mute">Entra con tu correo y se guardarán solos. Si usas BECOME desde el ícono de tu pantalla de inicio, ese ícono guarda los datos aparte: usa allí el botón <b>Pegar datos de Salud</b>.</div></div>':'');return}
  const v={coach:vCoach,hoy:vHoy,plan:vPlan,entreno:vEntreno,compras:vCompras,evolucion:vEvol}[tab]||vHoy;
  const sy=tab==='coach'?null:window.scrollY;
  r.innerHTML='<div class="app">'+v()+'</div><nav class="tabs">'+TABS.map(([k,n])=>`<a href="#${k}" class="${tab===k?'on':''}" aria-label="${n}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${n==='Mi evolución'?'Evolución':n}</a>`).join('')+'</nav>';
@@ -463,6 +468,7 @@ function vHoy(){const t=today(),e=eaten(),T=kcalT(),P=protT(),left=T-e.kcal,pl=M
  const logs=dayLogs(t).sort((a,b)=>a.time<b.time?-1:1);
  return`<div class="top"><div><small>${esc(DAYS[wd(t)])} ${parseD(t).getDate()}</small><h1>Hola${S.profile.name?', '+esc(S.profile.name):''}</h1></div><button class="ghost sm" data-go="evolucion">Mi evolución ›</button></div><div class="view">
  ${location.protocol==='file:'&&/iPhone|iPad|iPod/.test(navigator.userAgent)?'<div class="card" style="border-color:var(--acc)"><b>Tus datos pueden borrarse.</b><div class="sm mute">Abriste BECOME como archivo. Ábrelo desde su dirección web en Safari, o guarda una copia en Mi evolución → Copia de seguridad.</div></div>':''}
+ ${navigator.standalone&&!(S.health||{})[t]?'<div class="card"><button class="tap" data-a="hpaste"><div><h3>Pegar datos de Salud</h3><div class="sm mute">Importa lo que copió tu atajo de Salud</div></div><span class="chev">›</span></button></div>':''}
  <div class="card"><div class="ringwrap"><div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="var(--line)" stroke-width="12"/><circle class="p" cx="60" cy="60" r="52" fill="none" stroke="${over?'var(--warn)':'var(--acc)'}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><div class="in"><b class="num">${fmt(Math.abs(left))}</b><span class="sm mute">${over?'kcal de más':'kcal quedan'}</span></div></div>
  <div><div class="sm mute">Comido</div><div class="b num">${fmt(e.kcal)} / ${fmt(T)} kcal</div>${adjFor(t)?`<div class="sm mute">Incluye ajuste semanal ${adjFor(t)>0?'+':''}${adjFor(t)} kcal</div>`:''}
  <div class="sm mute" style="margin-top:10px">Proteína · te quedan ${fmt(pl)} g</div><div class="bar okc"><i style="width:${Math.min(100,e.prot/P*100)}%"></i></div><div class="sm num mute">${fmt(e.prot)} / ${P} g</div></div></div>
@@ -542,7 +548,7 @@ function vEvol(){const g=goalInfo(),p=S.profile,C=2*Math.PI*42;
  <div class="fig" id="wchart" style="margin-top:12px"></div><div class="sm mute"><span class="pill"></span>Tus pesajes · línea punteada: el camino de tu plan</div>
  <div class="grid2" style="margin-top:12px"><button class="acc" data-a="newweight">Nuevo peso</button><button class="ghost" data-a="howcalc">¿Cómo calculé el plazo?</button></div>
  <p class="sm mute" style="margin-bottom:0">La balanza varía 1–2 kg por agua o sal: mira la tendencia de 3–4 semanas, no el día a día.</p></div>
- ${(()=>{const hr=healthRows(1)[0];return`<div class="card"><button class="tap" data-a="health"><div><h3>Datos de Salud (iPhone)</h3><div class="sm mute">${hr?esc(fdate(hr[0]))+' · '+[hr[1].pasos!=null?fmt(hr[1].pasos)+' pasos':'',hr[1].sueno?hrsTxt(hr[1].sueno)+' h sueño':'',hr[1].fc?hr[1].fc+' lpm':'',hr[1].peso?String(hr[1].peso).replace('.',',')+' kg':'',hr[1].kcal!=null?fmt(hr[1].kcal)+' kcal gastadas':''].filter(Boolean).join(' · '):'Importa peso y calorías gastadas con un Atajo'}</div></div><span class="chev">›</span></button></div>`})()}
+ ${(()=>{const hr=healthRows(1)[0];return`<div class="card"><button class="tap" data-a="health"><div><h3>Datos de Salud (iPhone)</h3><div class="sm mute">${hr?esc(fdate(hr[0]))+' · '+[hr[1].pasos!=null?fmt(hr[1].pasos)+' pasos':'',hr[1].sueno?hrsTxt(hr[1].sueno)+' h sueño':'',hr[1].fc?hr[1].fc+' lpm':'',hr[1].peso?String(hr[1].peso).replace('.',',')+' kg':'',hr[1].kcal!=null?fmt(hr[1].kcal)+' kcal gastadas':''].filter(Boolean).join(' · '):'Importa peso y calorías gastadas con un Atajo'}</div></div><span class="chev">›</span></button><button class="tap" data-a="hpaste"><div><h3>Pegar datos de Salud</h3><div class="sm mute">Si el atajo los copió, impórtalos aquí con un toque</div></div><span class="chev">›</span></button></div>`})()}
  <div class="card"><button class="tap" data-a="goalset"><div><h3>Cambiar objetivo, ritmo o peso meta</h3><div class="sm mute">Meta ${p.goalWeight} kg · ${fmt(baseKcal())} kcal y ${protT()} g de proteína al día</div></div><span class="chev">›</span></button>
  <button class="tap" data-a="profile"><div><h3>Perfil</h3><div class="sm mute">${p.sex==='m'?'Hombre':'Mujer'}, ${age()} años, ${p.height} cm</div></div><span class="chev">›</span></button>
  <button class="tap" data-a="habits"><div><h3>Ajustes · Mis hábitos</h3><div class="sm mute">Agua, suplementos y cheat meal</div></div><span class="chev">›</span></button>
@@ -925,6 +931,8 @@ async function onClick(e){const g=e.target.closest('[data-go]');if(g){go(g.datas
  case'aiconf':mAiConf();break;
  case'backup':mBackup();break;
  case'health':mHealth();break;
+ case'hpaste':pasteHealth();break;
+ case'hpasteGo':{const v=($('#hpt')||{}).value;if(v){const i=v.indexOf('?');const h=healthFrom(new URLSearchParams((i>=0?v.slice(i+1):v).trim()));if(Object.keys(h).length){pendingH=h;close();applyHealth();render()}else toast('No encontré datos de Salud en ese texto')}break}
  case'bkdown':{const txt=backupText();S.lastBackup=today();save();try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download='become-respaldo-'+today()+'.json';document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast('Archivo descargado')}catch(er){toast('No se pudo descargar: usa Copiar')}break}
  case'bkcopy':{const txt=backupText();try{await navigator.clipboard.writeText(txt);S.lastBackup=today();save();toast('Copiado: pégalo en Notas o envíatelo')}catch(er){const t=$('#bktxt');if(t){t.value=txt;t.select()}toast('Selecciona el texto y cópialo')}break}
  case'bkfile':$('#bkfile').click();break;
