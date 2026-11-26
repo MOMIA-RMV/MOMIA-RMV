@@ -371,7 +371,7 @@ function regenMenu(){S.menu.seed++;save()}
 
 /* ---------- datos de Apple Health (vía Atajo de iPhone: ?pasos=&sueno=&fc=&peso=) ---------- */
 let pendingH=null;
-(function(){try{const q=new URLSearchParams(location.search);const num=k=>{let v=q.get(k);if(v==null)return null;v=String(v).replace(/\s/g,'').replace(',','.').replace(/[^0-9.\-]/g,'');const n=parseFloat(v);return isFinite(n)?n:null};
+(function(){try{const q=new URLSearchParams(location.search);const num=k=>{let v=q.get(k);if(v==null)return null;v=String(v).replace(/[^0-9.,]/g,'');if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(v))v=v.replace(/\./g,'');else if(/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(v)&&!/^\d{1,3},\d{3}$/.test(v))v=v.replace(/,/g,'');v=v.replace(',','.');const n=parseFloat(v);return isFinite(n)?n:null};
  const h={};let x=num('pasos');if(x!=null&&x>=0&&x<200000)h.pasos=Math.round(x);
  x=num('sueno');if(x==null)x=num('sueño');if(x!=null&&x>0){if(x>1440)x=x/3600;else if(x>24)x=x/60;if(x<=24)h.sueno=Math.round(x*10)/10}
  x=num('fc');if(x!=null&&x>=25&&x<=220)h.fc=Math.round(x);
