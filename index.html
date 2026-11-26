@@ -301,9 +301,26 @@ function kcalT(date=today()){return baseKcal()+adjFor(date)+actBonus(date)}
 /* calorías activas de Salud: lo normal ya está en el factor de actividad; se suma el 50% de lo que pase de lo normal (los relojes sobreestiman) */
 function actBase(){const p=S.profile;return Math.round(Math.max(200,(p.activity-1.1)*bmr())/10)*10}
 function actKcal(date){const h=(S.health||{})[date];return h&&h.kcal!=null?h.kcal:null}
-function actBonus(date){const k=actKcal(date);if(k==null||!S.profile)return 0;return Math.min(600,Math.max(0,Math.round((k-actBase())*.5/10)*10))}
+function actBonus(date){const k=actKcal(date);if(k==null||!S.profile)return 0;return Math.min(600,Math.max(0,Math.round((k-actBase())*actPct()/100/10)*10))}
+/* autocalibración del % con aprobación del usuario, cada 14 días según la tendencia de peso */
+function actPct(){const c=S.actCal;return c&&c.pct!=null?c.pct:50}
+const dDiff=(a,b)=>Math.round((parseD(b)-parseD(a))/864e5);
+function calibCheck(){const t=today();if(!S.profile||!Object.keys(S.health||{}).some(d=>(S.health[d]||{}).kcal!=null))return null;
+ if(!S.actCal)S.actCal={pct:50,last:t,prop:null};const c=S.actCal;if(c.prop)return c.prop;if(dDiff(c.last,t)<14)return null;
+ const from=addDays(t,-21),ws=S.weights.filter(w=>w.date>=from).sort((a,b)=>a.date<b.date?-1:1);
+ let bon=0;for(let d=addDays(t,-14);d<t;d=addDays(d,1))if(actBonus(d)>0)bon++;
+ if(ws.length<2||dDiff(ws[0].date,ws[ws.length-1].date)<10||bon<3)return null;
+ const days=dDiff(ws[0].date,ws[ws.length-1].date),rate=(ws[ws.length-1].kg-ws[0].kg)/days*7,p=S.profile,g=p.goal,pace=p.pace||.5,cur=c.pct;
+ let dir=0,why='';
+ if(g==='lose'){if(rate>-.5*pace){dir=-1;why=`bajaste ${Math.abs(rate).toFixed(2).replace('.',',')} kg/semana y tu meta es ${String(pace).replace('.',',')}`}else if(rate<-1.5*pace){dir=1;why=`estás bajando ${Math.abs(rate).toFixed(2).replace('.',',')} kg/semana, más rápido que tu meta de ${String(pace).replace('.',',')}`}}
+ else if(g==='gain'){if(rate<.5*pace){dir=1;why=`subiste ${rate.toFixed(2).replace('.',',')} kg/semana y tu meta es ${String(pace).replace('.',',')}`}else if(rate>1.5*pace){dir=-1;why=`estás subiendo ${rate.toFixed(2).replace('.',',')} kg/semana, más rápido que tu meta`}}
+ else{if(rate>.25){dir=-1;why=`subiste ${rate.toFixed(2).replace('.',',')} kg/semana`}else if(rate<-.25){dir=1;why=`bajaste ${Math.abs(rate).toFixed(2).replace('.',',')} kg/semana`}}
+ const to=Math.max(0,Math.min(100,cur+dir*15));
+ if(!dir||to===cur){c.last=t;c.ok=t;save();return null}
+ c.prop={from:cur,to,why,date:t};save();return c.prop}
+function calibCard(){const pr=calibCheck();if(!pr)return'';return`<div class="card" style="border-color:var(--acc)"><div class="b">Propuesta: ${pr.to<pr.from?'bajar':'subir'} el ajuste por actividad del ${pr.from}% al ${pr.to}%</div><div class="sm mute">En las últimas semanas ${esc(pr.why)}. ${pr.to<pr.from?'Contaremos menos de las calorías del reloj para que vuelvas a avanzar.':'Contaremos más de las calorías del reloj para que no bajes tan rápido.'} Nada cambia si no lo aceptas.</div><div class="grid2" style="margin-top:10px"><button class="acc" data-a="calOk">Aceptar</button><button class="ghost" data-a="calNo">Mantener ${pr.from}%</button></div></div>`}
 function balance(date=today()){const k=actKcal(date);if(k==null)return null;const n=new Date(),fr=date===today()?Math.min(1,(n.getHours()+n.getMinutes()/60)/24):1,rest=Math.round(bmr()*fr);const ate=sum(dayLogs(date),l=>l.kcal),burn=rest+Math.round(k);return{ate,burn,rest,act:k,bal:ate-burn,bonus:actBonus(date),base:actBase()}}
-function metaParts(t=today()){const a=adjFor(t),b=actBonus(t),base=baseKcal();const p=[`base ${fmt(base)}`];if(a)p.push(`${a>0?'+':'−'} ${fmt(Math.abs(a))} ajuste semanal`);if(b)p.push(`+ ${fmt(b)} por actividad`);return{base,a,b,txt:p.join(' ')}}
+function metaParts(t=today()){const a=adjFor(t),b=actBonus(t),base=baseKcal();const p=[`base ${fmt(base)}`];if(a)p.push(`${a>0?'+':'−'} ${fmt(Math.abs(a))} ajuste semanal`);if(b)p.push(`+ ${fmt(b)} por actividad (${actPct()}% de lo que pasó de lo normal)`);return{base,a,b,txt:p.join(' ')}}
 function metaTxt(t){const m=metaParts(t),h=actKcal(t)!=null;if(!m.a&&!m.b)return h?`<div class="sm mute">Meta de hoy: ${fmt(kcalT(t))} kcal, sin ajuste (tu actividad está dentro de lo normal)</div>`:'';return`<div class="sm" style="margin-top:2px"><b>Meta ajustada de hoy: ${fmt(kcalT(t))} kcal</b></div><div class="sm mute">${m.txt}</div>`}
 function balHtml(){const b=balance();if(!b)return'';const g=S.profile.goal,d=-b.bal;
  const msg=g==='lose'?(d>=0?`Vas con ${fmt(d)} kcal de déficit: bien para bajar grasa.`:`Vas ${fmt(-d)} kcal sobre lo que gastaste.`):g==='gain'?(d<=0?`Vas ${fmt(-d)} kcal sobre lo que gastaste: bien para ganar músculo.`:`Te faltan ${fmt(d)} kcal para cubrir lo que gastaste.`):(Math.abs(d)<250?'Vas parejo con lo que gastaste.':d>0?`Vas ${fmt(d)} kcal bajo lo que gastaste.`:`Vas ${fmt(-d)} kcal sobre lo que gastaste.`);
@@ -479,6 +496,7 @@ function vHoy(){const t=today(),e=eaten(),T=kcalT(),P=protT(),left=T-e.kcal,pl=M
   else cheat=`<div class="tap" style="cursor:default"><div><div class="b">Cheat meal</div><div class="sm mute">${DAYS[S.cheat.day]} ${esc(S.cheat.time)}${ch.available&&!ch.isDay?' · te lo saltaste, puedes usarlo hoy':''}</div></div>${ch.available?`<button class="acc sm" data-a="cheat" style="margin-left:auto">Comenzar (2 h)</button>`:''}</div>`}
  const logs=dayLogs(t).sort((a,b)=>a.time<b.time?-1:1);
  return`<div class="top"><div><small>${esc(DAYS[wd(t)])} ${parseD(t).getDate()}</small><h1>Hola${S.profile.name?', '+esc(S.profile.name):''}</h1></div><button class="ghost sm" data-go="evolucion">Mi evolución ›</button></div><div class="view">
+ ${calibCard()}
  ${location.protocol==='file:'&&/iPhone|iPad|iPod/.test(navigator.userAgent)?'<div class="card" style="border-color:var(--acc)"><b>Tus datos pueden borrarse.</b><div class="sm mute">Abriste BECOME como archivo. Ábrelo desde su dirección web en Safari, o guarda una copia en Mi evolución → Copia de seguridad.</div></div>':''}
  ${navigator.standalone&&!(S.health||{})[t]?'<div class="card"><button class="tap" data-a="hpaste"><div><h3>Pegar datos de Salud</h3><div class="sm mute">Importa lo que copió tu atajo de Salud</div></div><span class="chev">›</span></button></div>':''}
  <div class="card"><div class="ringwrap"><div class="ring"><svg viewBox="0 0 120 120"><circle cx="60" cy="60" r="52" fill="none" stroke="var(--line)" stroke-width="12"/><circle class="p" cx="60" cy="60" r="52" fill="none" stroke="${over?'var(--warn)':'var(--acc)'}" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C*(1-pct)}"/></svg><div class="in"><b class="num">${fmt(Math.abs(left))}</b><span class="sm mute">${over?'kcal de más':'kcal quedan'}</span></div></div>
@@ -615,7 +633,7 @@ MIS COMIDAS (propias): ${S.myMeals.map(m=>`[id ${m.id}] ${m.name} (${MEALN[m.mea
 LO QUE MÁS COME: ${frequent().slice(0,6).map(c=>`${c.label} (${c.n} veces, ${MEALN[c.meal]}, ${c.kcal} kcal)`).join('; ')||'aún sin patrón'}. Cuando pida ideas, prioriza recomendar lo que ya come seguido y sus comidas propias si caben en lo que le queda.
 BATERÍA DE ENERGÍA HOY: ${battery().pct}%.
 DATOS DE SALUD (Apple Health, últimos días): ${healthTxt()}.
-BALANCE HOY: ${(b=>b?`comió ${b.ate}, gastó ${b.burn} kcal (${b.rest} en reposo hasta esta hora + ${b.act} activas; lo normal son ${b.base} activas). La meta de hoy ya incluye +${b.bonus} kcal por actividad extra (50% de lo que pasó de lo normal).`:'sin calorías activas importadas hoy')(balance())}
+BALANCE HOY: ${(b=>b?`comió ${b.ate}, gastó ${b.burn} kcal (${b.rest} en reposo hasta esta hora + ${b.act} activas; lo normal son ${b.base} activas). La meta de hoy ya incluye +${b.bonus} kcal por actividad extra (${actPct()}% de lo que pasó de lo normal; el usuario aprueba cambios a ese % cada 2 semanas).`:'sin calorías activas importadas hoy')(balance())}
 TENDENCIA SEMANAL (calorías activas promedio/día y peso promedio, de la más reciente a la más antigua): ${actWeeks(4).map(w=>`${w.ws}: ${w.kcal??'–'} kcal, ${w.kg??'–'} kg`).join('; ')}. Úsala para decir si el plan está funcionando (peso vs objetivo) y si el gasto subió o bajó. Úsalos para ajustar consejos (pocos pasos: sugiere caminar; poco sueño: menos intensidad; FC en reposo alta: descanso; kcal = energía activa gastada según el iPhone/Watch, no la sumes a la meta automáticamente pero coméntala si es muy alta o baja).
 LO QUE RECUERDAS DEL USUARIO: ${S.memory.map(m=>m.text).join('; ')||'nada aún'}. Si te cuenta un dato estable (gustos, alergias, horarios, lesiones), guárdalo con recordar.`}
 function coachTools(acts){const T=(name,description,props,req,fn)=>({name,description,inputSchema:{type:'object',properties:props,required:req||[]},execute:async i=>{try{return await fn(i)}catch(e){return{error:String(e.message||e)}}}});
@@ -945,6 +963,8 @@ async function onClick(e){const g=e.target.closest('[data-go]');if(g){go(g.datas
  case'aiconf':mAiConf();break;
  case'backup':mBackup();break;
  case'health':mHealth();break;
+ case'calOk':{const c=S.actCal;if(c&&c.prop){c.pct=c.prop.to;c.last=today();c.prop=null;save();toast('Ajuste por actividad: '+c.pct+'%');render()}break}
+ case'calNo':{const c=S.actCal;if(c&&c.prop){c.last=today();c.prop=null;save();toast('Se mantiene en '+actPct()+'%');render()}break}
  case'hpaste':pasteHealth();break;
  case'hpasteGo':{const v=($('#hpt')||{}).value;if(v){const i=v.indexOf('?');const h=healthFrom(new URLSearchParams((i>=0?v.slice(i+1):v).trim()));if(Object.keys(h).length){pendingH=h;close();applyHealth();render()}else toast('No encontré datos de Salud en ese texto')}break}
  case'bkdown':{const txt=backupText();S.lastBackup=today();save();try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download='become-respaldo-'+today()+'.json';document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast('Archivo descargado')}catch(er){toast('No se pudo descargar: usa Copiar')}break}
