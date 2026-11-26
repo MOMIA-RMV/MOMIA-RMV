@@ -373,7 +373,7 @@ function regenMenu(){S.menu.seed++;save()}
 let pendingH=null;
 (function(){try{const q=new URLSearchParams(location.search);const num=k=>{let v=q.get(k);if(v==null)return null;v=String(v).replace(/[^0-9.,]/g,'');if(/^\d{1,3}(\.\d{3})+(,\d+)?$/.test(v))v=v.replace(/\./g,'');else if(/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(v)&&!/^\d{1,3},\d{3}$/.test(v))v=v.replace(/,/g,'');v=v.replace(',','.');const n=parseFloat(v);return isFinite(n)?n:null};
  const h={};let x=num('pasos');if(x!=null&&x>=0&&x<200000)h.pasos=Math.round(x);
- x=num('sueno');if(x==null)x=num('sueño');if(x!=null&&x>0){if(x>1440)x=x/3600;else if(x>24)x=x/60;if(x<=24)h.sueno=Math.round(x*10)/10}
+ x=(()=>{const r=String(q.get('sueno')||q.get('sueño')||'').toLowerCase();let m=r.match(/(\d+)\s*:\s*(\d+)/);if(m)return +m[1]+m[2]/60;m=r.match(/(\d+(?:[.,]\d+)?)\s*h/);if(m){const mm=r.match(/(\d+)\s*m/);return parseFloat(m[1].replace(',','.'))+(mm?mm[1]/60:0)}m=r.match(/^\s*(\d+)\s*min/);if(m)return m[1]/60;return null})();if(x==null)x=num('sueno');if(x==null)x=num('sueño');if(x!=null&&x>0){if(x>1440)x=x/3600;else if(x>24)x=x/60;if(x<=24)h.sueno=Math.round(x*10)/10}
  x=num('fc');if(x!=null&&x>=25&&x<=220)h.fc=Math.round(x);
  x=num('peso');if(x!=null&&x>=25&&x<=350)h.peso=Math.round(x*10)/10;
  x=num('kcal');if(x!=null&&x>=0&&x<=15000)h.kcal=Math.round(x);
@@ -389,7 +389,7 @@ function healthRows(n=7){const H=S.health||{};return Object.keys(H).sort().rever
 function healthTxt(){const r=healthRows(7);if(!r.length)return'sin datos importados';return r.map(([d,h])=>`${d}: ${[h.pasos!=null?h.pasos+' pasos':'',h.sueno?h.sueno+' h sueño':'',h.fc?'FC reposo '+h.fc+' lpm':'',h.peso?h.peso+' kg':'',h.kcal!=null?h.kcal+' kcal de energía activa gastadas':''].filter(Boolean).join(', ')}`).join('; ')}
 function mHealth(){const r=healthRows(14);modal('Datos de Salud',`${r.length?r.map(([d,h])=>`<div class="tap" style="cursor:default"><div><div class="b">${esc(fdate(d))}</div><div class="sm mute">${[h.pasos!=null?fmt(h.pasos)+' pasos':'',h.sueno?hrsTxt(h.sueno)+' h de sueño':'',h.fc?h.fc+' lpm en reposo':'',h.peso?String(h.peso).replace('.',',')+' kg':'',h.kcal!=null?fmt(h.kcal)+' kcal gastadas':''].filter(Boolean).join(' · ')}</div></div></div>`).join(''):'<p class="mute">Aún no importas datos.</p>'}
  <h3 style="margin-top:14px">Cómo conectarlo</h3><p class="sm mute">En tu iPhone crea un Atajo que lea Salud y abra BECOME con esta dirección:</p>
- <p class="sm" style="word-break:break-all"><code>${esc(location.origin+location.pathname)}?peso=KG&amp;kcal=KCAL</code></p>
+ <p class="sm" style="word-break:break-all"><code>${esc(location.origin+location.pathname)}?peso=KG&amp;kcal=KCAL&amp;sueno=HORAS</code></p>
  <p class="sm mute">Puedes mandar solo algunos datos. El sueño puede ir en horas o en minutos. Luego automatízalo en Atajos → Automatización → Hora del día, todos los días a las 9:00.</p>`)}
 
 /* ---------- capacidades (IA, dictado, nube) ---------- */
