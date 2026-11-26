@@ -373,7 +373,7 @@ function regenMenu(){S.menu.seed++;save()}
 let pendingH=null;
 (function(){try{const q=new URLSearchParams(location.search);const num=k=>{let v=q.get(k);if(v==null)return null;v=String(v).replace(/\s/g,'').replace(',','.').replace(/[^0-9.\-]/g,'');const n=parseFloat(v);return isFinite(n)?n:null};
  const h={};let x=num('pasos');if(x!=null&&x>=0&&x<200000)h.pasos=Math.round(x);
- x=num('sueno');if(x==null)x=num('sueño');if(x!=null&&x>0){if(x>24)x=x/60;if(x<=24)h.sueno=Math.round(x*10)/10}
+ x=num('sueno');if(x==null)x=num('sueño');if(x!=null&&x>0){if(x>1440)x=x/3600;else if(x>24)x=x/60;if(x<=24)h.sueno=Math.round(x*10)/10}
  x=num('fc');if(x!=null&&x>=25&&x<=220)h.fc=Math.round(x);
  x=num('peso');if(x!=null&&x>=25&&x<=350)h.peso=Math.round(x*10)/10;
  if(['pasos','sueno','sueño','fc','peso'].some(k=>q.has(k))){const rest=[...q.entries()].filter(([k])=>!['pasos','sueno','sueño','fc','peso'].includes(k));
