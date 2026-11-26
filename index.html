@@ -341,7 +341,7 @@ function logMyMeal(id,meal,date){const m=S.myMeals.find(x=>x.id===id);if(!m)retu
 /* ---------- batería de energía ---------- */
 const WAKE='Horas despierto (desde las 7:00)';
 function battery(){const t=today(),ci=S.checkins[t],now=new Date(),h=Math.max(0,now.getHours()+now.getMinutes()/60-7);const parts=[];
- const sl=ci?Math.min(1,ci.sleep/8):.75,en=ci?ci.energy/5:.6;let v=100*(.5*sl+.5*en);parts.push([ci?`Base: sueño ${ci.sleep} h y energía ${ci.energy}/5`:'Base: sin check-in (valor medio)',Math.round(v)]);
+ const hs=(S.health||{})[t],hsl=hs&&hs.sueno;const sl=ci?Math.min(1,ci.sleep/8):hsl?Math.min(1,hsl/8):.75,en=ci?ci.energy/5:.6;let v=100*(.5*sl+.5*en);parts.push([ci?`Base: sueño ${ci.sleep} h y energía ${ci.energy}/5`:hsl?`Base: sueño ${hrsTxt(hsl)} h (Salud), sin check-in`:'Base: sin check-in (valor medio)',Math.round(v)]);
  if(ci&&ci.pain){const p=[0,8,20][ci.pain];v-=p;parts.push(['Dolor '+['','leve','fuerte'][ci.pain],-p])}
  const dr=Math.round(h*3);v-=dr;parts.push([WAKE,-dr]);
  const meals=new Set(dayLogs(t).map(l=>l.meal)).size,fb=Math.min(12,meals*4);if(fb){v+=fb;parts.push(['Comidas registradas',fb])}
@@ -369,6 +369,28 @@ function addWeight(kg){const t=today();S.weights=S.weights.filter(w=>w.date!==t)
 function addCardio(type,min){const c=CARDIO[type]||CARDIO.otro;const kcal=Math.round(c[1]*curW()*min/60);const x={id:uid(),date:today(),type,min,kcal};S.train.cardio.push(x);save();return x}
 function regenMenu(){S.menu.seed++;save()}
 
+/* ---------- datos de Apple Health (vía Atajo de iPhone: ?pasos=&sueno=&fc=&peso=) ---------- */
+let pendingH=null;
+(function(){try{const q=new URLSearchParams(location.search);const num=k=>{let v=q.get(k);if(v==null)return null;v=String(v).replace(/\s/g,'').replace(',','.').replace(/[^0-9.\-]/g,'');const n=parseFloat(v);return isFinite(n)?n:null};
+ const h={};let x=num('pasos');if(x!=null&&x>=0&&x<200000)h.pasos=Math.round(x);
+ x=num('sueno');if(x==null)x=num('sueño');if(x!=null&&x>0){if(x>24)x=x/60;if(x<=24)h.sueno=Math.round(x*10)/10}
+ x=num('fc');if(x!=null&&x>=25&&x<=220)h.fc=Math.round(x);
+ x=num('peso');if(x!=null&&x>=25&&x<=350)h.peso=Math.round(x*10)/10;
+ if(['pasos','sueno','sueño','fc','peso'].some(k=>q.has(k))){const rest=[...q.entries()].filter(([k])=>!['pasos','sueno','sueño','fc','peso'].includes(k));
+  const qs=rest.length?'?'+new URLSearchParams(rest).toString():'';try{history.replaceState(null,'',location.pathname+qs+location.hash)}catch(e){}}
+ if(Object.keys(h).length)pendingH=h}catch(e){}})();
+function applyHealth(){if(!pendingH||!account||!S.profile)return;const h=pendingH;pendingH=null;const t=today();
+ if(!S.health)S.health={};S.health[t]=Object.assign({},S.health[t]||{},h,{at:nowHM()});
+ if(h.peso){S.weights=S.weights.filter(w=>w.date!==t);S.weights.push({date:t,kg:h.peso})}
+ save();const p=[];if(h.pasos!=null)p.push(fmt(h.pasos)+' pasos');if(h.sueno)p.push(hrsTxt(h.sueno)+' h de sueño');if(h.fc)p.push(h.fc+' lpm');if(h.peso)p.push(String(h.peso).replace('.',',')+' kg');
+ setTimeout(()=>toast('Datos de Salud importados: '+p.join(' · ')),300)}
+function healthRows(n=7){const H=S.health||{};return Object.keys(H).sort().reverse().slice(0,n).map(d=>[d,H[d]])}
+function healthTxt(){const r=healthRows(7);if(!r.length)return'sin datos importados';return r.map(([d,h])=>`${d}: ${[h.pasos!=null?h.pasos+' pasos':'',h.sueno?h.sueno+' h sueño':'',h.fc?'FC reposo '+h.fc+' lpm':'',h.peso?h.peso+' kg':''].filter(Boolean).join(', ')}`).join('; ')}
+function mHealth(){const r=healthRows(14);modal('Datos de Salud',`${r.length?r.map(([d,h])=>`<div class="tap" style="cursor:default"><div><div class="b">${esc(fdate(d))}</div><div class="sm mute">${[h.pasos!=null?fmt(h.pasos)+' pasos':'',h.sueno?hrsTxt(h.sueno)+' h de sueño':'',h.fc?h.fc+' lpm en reposo':'',h.peso?String(h.peso).replace('.',',')+' kg':''].filter(Boolean).join(' · ')}</div></div></div>`).join(''):'<p class="mute">Aún no importas datos.</p>'}
+ <h3 style="margin-top:14px">Cómo conectarlo</h3><p class="sm mute">En tu iPhone crea un Atajo que lea Salud y abra BECOME con esta dirección:</p>
+ <p class="sm" style="word-break:break-all"><code>${esc(location.origin+location.pathname)}?pasos=PASOS&amp;sueno=HORAS&amp;fc=FC&amp;peso=KG</code></p>
+ <p class="sm mute">Puedes mandar solo algunos datos. El sueño puede ir en horas o en minutos. Luego automatízalo en Atajos → Automatización → Hora del día, todos los días a las 9:00.</p>`)}
+
 /* ---------- capacidades (IA, dictado, nube) ---------- */
 let capStatus='cargando';
 async function initCaps(){const maxW=window.parent!==window?40:4;for(let i=0;i<maxW&&!(window.claude&&window.claude.use);i++)await new Promise(r=>setTimeout(r,250));
@@ -390,7 +412,7 @@ async function initCaps(){const maxW=window.parent!==window?40:4;for(let i=0;i<m
 let tab='hoy',planDay=null,onbStep=0,session=null,recording=false,busy=false;
 const ICON={coach:'<path d="M4 5h16v10H9l-5 4z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>',hoy:'<circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',plan:'<rect x="4" y="5" width="16" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 10h16M9 3v4M15 3v4" stroke="currentColor" stroke-width="2"/>',entreno:'<path d="M3 10v4M6 7v10M18 7v10M21 10v4M6 12h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>',compras:'<path d="M4 5h2l2 10h10l2-7H7" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="9" cy="19" r="1.5" fill="currentColor"/><circle cx="17" cy="19" r="1.5" fill="currentColor"/>',evolucion:'<path d="M4 18l5-6 4 3 7-9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>'};
 const TABS=[['coach','Coach'],['hoy','Hoy'],['plan','Mi plan'],['entreno','Entreno'],['compras','Compras'],['evolucion','Mi evolución']];
-function render(){const r=$('#root');if(!S.profile&&cloudPending){r.innerHTML='<div class="welcome"><div class="logo">BECOME<span>.</span></div><p class="mute">Cargando tus datos…</p></div>';return}if(!S.profile||!account){r.innerHTML=welcome();return}
+function render(){applyHealth();const r=$('#root');if(!S.profile&&cloudPending){r.innerHTML='<div class="welcome"><div class="logo">BECOME<span>.</span></div><p class="mute">Cargando tus datos…</p></div>';return}if(!S.profile||!account){r.innerHTML=welcome();return}
  const v={coach:vCoach,hoy:vHoy,plan:vPlan,entreno:vEntreno,compras:vCompras,evolucion:vEvol}[tab]||vHoy;
  const sy=tab==='coach'?null:window.scrollY;
  r.innerHTML='<div class="app">'+v()+'</div><nav class="tabs">'+TABS.map(([k,n])=>`<a href="#${k}" class="${tab===k?'on':''}" aria-label="${n}"><svg viewBox="0 0 24 24">${ICON[k]}</svg>${n==='Mi evolución'?'Evolución':n}</a>`).join('')+'</nav>';
@@ -519,6 +541,7 @@ function vEvol(){const g=goalInfo(),p=S.profile,C=2*Math.PI*42;
  <div class="fig" id="wchart" style="margin-top:12px"></div><div class="sm mute"><span class="pill"></span>Tus pesajes · línea punteada: el camino de tu plan</div>
  <div class="grid2" style="margin-top:12px"><button class="acc" data-a="newweight">Nuevo peso</button><button class="ghost" data-a="howcalc">¿Cómo calculé el plazo?</button></div>
  <p class="sm mute" style="margin-bottom:0">La balanza varía 1–2 kg por agua o sal: mira la tendencia de 3–4 semanas, no el día a día.</p></div>
+ ${(()=>{const hr=healthRows(1)[0];return`<div class="card"><button class="tap" data-a="health"><div><h3>Datos de Salud (iPhone)</h3><div class="sm mute">${hr?esc(fdate(hr[0]))+' · '+[hr[1].pasos!=null?fmt(hr[1].pasos)+' pasos':'',hr[1].sueno?hrsTxt(hr[1].sueno)+' h sueño':'',hr[1].fc?hr[1].fc+' lpm':'',hr[1].peso?String(hr[1].peso).replace('.',',')+' kg':''].filter(Boolean).join(' · '):'Importa pasos, sueño, pulso y peso con un Atajo'}</div></div><span class="chev">›</span></button></div>`})()}
  <div class="card"><button class="tap" data-a="goalset"><div><h3>Cambiar objetivo, ritmo o peso meta</h3><div class="sm mute">Meta ${p.goalWeight} kg · ${fmt(baseKcal())} kcal y ${protT()} g de proteína al día</div></div><span class="chev">›</span></button>
  <button class="tap" data-a="profile"><div><h3>Perfil</h3><div class="sm mute">${p.sex==='m'?'Hombre':'Mujer'}, ${age()} años, ${p.height} cm</div></div><span class="chev">›</span></button>
  <button class="tap" data-a="habits"><div><h3>Ajustes · Mis hábitos</h3><div class="sm mute">Agua, suplementos y cheat meal</div></div><span class="chev">›</span></button>
@@ -572,6 +595,7 @@ CHEAT MEAL: ${S.cheat.on?DAYS[S.cheat.day]+' '+S.cheat.time:'desactivado'}; ${ch
 MIS COMIDAS (propias): ${S.myMeals.map(m=>`[id ${m.id}] ${m.name} (${MEALN[m.meal]}, ${m.kcal} kcal, ${m.prot} g)`).join('; ')||'ninguna'}.
 LO QUE MÁS COME: ${frequent().slice(0,6).map(c=>`${c.label} (${c.n} veces, ${MEALN[c.meal]}, ${c.kcal} kcal)`).join('; ')||'aún sin patrón'}. Cuando pida ideas, prioriza recomendar lo que ya come seguido y sus comidas propias si caben en lo que le queda.
 BATERÍA DE ENERGÍA HOY: ${battery().pct}%.
+DATOS DE SALUD (Apple Health, últimos días): ${healthTxt()}. Úsalos para ajustar consejos (pocos pasos: sugiere caminar; poco sueño: menos intensidad; FC en reposo alta: descanso).
 LO QUE RECUERDAS DEL USUARIO: ${S.memory.map(m=>m.text).join('; ')||'nada aún'}. Si te cuenta un dato estable (gustos, alergias, horarios, lesiones), guárdalo con recordar.`}
 function coachTools(acts){const T=(name,description,props,req,fn)=>({name,description,inputSchema:{type:'object',properties:props,required:req||[]},execute:async i=>{try{return await fn(i)}catch(e){return{error:String(e.message||e)}}}});
  const mealE={type:'string',enum:['desayuno','almuerzo','colacion','cena','otro']};
@@ -899,6 +923,7 @@ async function onClick(e){const g=e.target.closest('[data-go]');if(g){go(g.datas
  case'resetswap':delete S.planOv[d.d+'|'+d.k];delete S.planOv['w'+wd(d.d)+'|'+d.k];save();close();render();break;
  case'aiconf':mAiConf();break;
  case'backup':mBackup();break;
+ case'health':mHealth();break;
  case'bkdown':{const txt=backupText();S.lastBackup=today();save();try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'application/json'}));a.download='become-respaldo-'+today()+'.json';document.body.append(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1500);toast('Archivo descargado')}catch(er){toast('No se pudo descargar: usa Copiar')}break}
  case'bkcopy':{const txt=backupText();try{await navigator.clipboard.writeText(txt);S.lastBackup=today();save();toast('Copiado: pégalo en Notas o envíatelo')}catch(er){const t=$('#bktxt');if(t){t.value=txt;t.select()}toast('Selecciona el texto y cópialo')}break}
  case'bkfile':$('#bkfile').click();break;
